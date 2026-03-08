@@ -3,10 +3,9 @@ Data extraction module for fetching forex data from Twelve Data API.
 Implements retry logic, rate limiting, and quality checks.
 """
 
-import time
 import requests
-from typing import Dict, List, Optional
-from datetime import datetime, timedelta
+from typing import Dict, Optional
+from datetime import datetime
 import pandas as pd
 from tenacity import retry, stop_after_attempt, wait_exponential
 

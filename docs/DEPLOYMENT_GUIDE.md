@@ -1,383 +1,223 @@
-# 🚀 Production Deployment Guide
-
-## Overview
-This guide covers deploying the Real-Time MLOps Pipeline for USD Forecasting to production environments.
+# Deployment Guide
 
 ## Supported Platforms
 
-### 1. Vercel (Recommended for API)
-- ✅ Best for FastAPI backend
-- ✅ Automatic HTTPS
-- ✅ Global CDN
-- ✅ Easy environment variable management
+| Platform | Best For | Cost |
+|----------|----------|------|
+| **Vercel** (recommended) | Serverless API, zero-ops | Free tier available |
+| **Railway** | Full-stack with Docker + DB | $5/month credit |
+| **Render** | Docker with cron jobs | Free tier (750h/month) |
+| **Docker (self-hosted)** | Full control, local dev | Infrastructure cost |
 
-### 2. Railway
-- ✅ Full-stack applications
-- ✅ Docker support
-- ✅ Database hosting
-- ✅ Cron jobs support
+---
 
-### 3. Render
-- ✅ Free tier available
-- ✅ Docker support
-- ✅ Cron jobs
-- ✅ PostgreSQL hosting
+## Vercel Deployment
 
-### 4. AWS/GCP/Azure
-- ✅ Enterprise-grade
-- ✅ Full control
-- ✅ Scalable infrastructure
+Vercel is the recommended platform. The app auto-detects serverless mode and disables filesystem-dependent features (SQLite, file logging).
 
-## Pre-Deployment Checklist
+### Prerequisites
+- Node.js (for Vercel CLI)
+- A [Twelve Data API key](https://twelvedata.com/register) (free: 800 calls/day)
 
-### Required API Keys
-- [ ] Twelve Data API key ([Get it here](https://twelvedata.com/))
-- [ ] DagsHub account and token (optional, for MLflow)
-- [ ] Cloud storage credentials (MinIO/S3)
+### Steps
 
-### Environment Variables
-Copy `.env.example` to `.env.production` and fill in:
 ```bash
-# Required
-TWELVE_DATA_API_KEY=your_api_key_here
-
-# Optional but recommended
-DAGSHUB_USERNAME=your_username
-DAGSHUB_TOKEN=your_token
-MLFLOW_TRACKING_URI=your_mlflow_uri
-```
-
-## Deployment Instructions
-
-### Vercel Deployment
-
-1. **Install Vercel CLI:**
-```bash
+# 1. Install Vercel CLI
 npm i -g vercel
-```
 
-2. **Login:**
-```bash
+# 2. Login
 vercel login
-```
 
-3. **Deploy:**
-```bash
+# 3. Deploy (preview)
+vercel
+
+# 4. Deploy to production
 vercel --prod
-```
 
-4. **Set Environment Variables:**
-```bash
+# 5. Set environment variables
 vercel env add TWELVE_DATA_API_KEY
-vercel env add DAGSHUB_USERNAME
-vercel env add DAGSHUB_TOKEN
 ```
 
-5. **Configure Cron (via Vercel Cron):**
-- Add cron jobs in `vercel.json` (already configured for 2-hour updates)
+### What happens on Vercel
 
-### Railway Deployment
+- `requirements.txt` (slim, ~150MB) is installed — only API-serving dependencies
+- The `VERCEL=1` env var is set automatically, enabling serverless mode:
+  - SQLite database writes are skipped
+  - File logging falls back to console-only
+  - Prediction history served from in-memory deque
+  - Infrastructure links (Grafana, Prometheus, etc.) hidden from dashboard
+- The bundled model (`models/latest_model.pkl`, 87KB) is loaded on cold start
+- Max lambda: 100MB, memory: 1024MB, timeout: 60s
 
-1. **Install Railway CLI:**
-```bash
-npm i -g @railway/cli
-```
+### Vercel Configuration
 
-2. **Login:**
-```bash
-railway login
-```
+The project includes `vercel.json`:
 
-3. **Initialize Project:**
-```bash
-railway init
-```
-
-4. **Deploy:**
-```bash
-railway up
-```
-
-5. **Set Environment Variables:**
-```bash
-railway variables set TWELVE_DATA_API_KEY=your_key
-```
-
-6. **Add Cron Service:**
-```bash
-railway service create cron-job
-```
-
-### Render Deployment
-
-1. **Connect GitHub Repository:**
-   - Go to [Render Dashboard](https://dashboard.render.com/)
-   - Click "New +" → "Web Service"
-   - Connect your GitHub repository
-
-2. **Configure Service:**
-   - **Name:** usd-volatility-api
-   - **Environment:** Docker
-   - **Docker Command:** (use default from Dockerfile)
-   - **Plan:** Free or paid
-
-3. **Set Environment Variables:**
-   - Add all variables from `.env.example`
-
-4. **Add Cron Job:**
-   - Create a new "Cron Job"
-   - Schedule: `0 */2 * * *` (every 2 hours)
-   - Command: `python -m src.data.data_extraction`
-
-### Docker Deployment (Self-Hosted)
-
-1. **Build Image:**
-```bash
-docker build -t usd-volatility-predictor:latest .
-```
-
-2. **Run Container:**
-```bash
-docker run -d \
-  --name usd-volatility-api \
-  -p 8000:8000 \
-  --env-file .env.production \
-  usd-volatility-predictor:latest
-```
-
-3. **Set up Cron (Host Machine):**
-```bash
-# Add to crontab
-0 */2 * * * docker exec usd-volatility-api python -m src.data.data_extraction
-```
-
-### Docker Compose (Full Stack)
-
-```bash
-# Start all services
-docker-compose up -d
-
-# Check logs
-docker-compose logs -f
-
-# Stop services
-docker-compose down
-```
-
-## Post-Deployment Verification
-
-### 1. Health Check
-```bash
-curl https://your-domain.com/health
-```
-
-Expected response:
 ```json
 {
-  "status": "healthy",
-  "timestamp": "2025-12-29T..."
+  "builds": [{
+    "src": "src/api/main.py",
+    "use": "@vercel/python",
+    "config": { "maxLambdaSize": "100mb" }
+  }],
+  "routes": [
+    { "src": "/static/(.*)", "dest": "src/ui/static/$1" },
+    { "src": "/(.*)", "dest": "src/api/main.py" }
+  ],
+  "functions": {
+    "src/api/main.py": { "memory": 1024, "maxDuration": 60 }
+  }
 }
-```
-
-### 2. API Test
-```bash
-curl https://your-domain.com/api/v1/predict
-```
-
-### 3. Monitor Logs
-```bash
-# Vercel
-vercel logs
-
-# Railway
-railway logs
-
-# Render
-# Check dashboard logs
-
-# Docker
-docker logs usd-volatility-api
-```
-
-## Cron Job Configuration
-
-The project is configured to update data **every 2 hours**:
-
-### Schedule: `0 */2 * * *`
-- Runs at: 00:00, 02:00, 04:00, 06:00, ..., 22:00 UTC
-- Fetches latest USD/EUR data
-- Updates model predictions
-- Stores results in database
-
-### Airflow DAG (Alternative)
-If using Airflow:
-```python
-schedule_interval="0 */2 * * *"  # Every 2 hours
-```
-
-### Vercel Cron
-```json
-{
-  "crons": [{
-    "path": "/api/cron/update-data",
-    "schedule": "0 */2 * * *"
-  }]
-}
-```
-
-## Monitoring & Alerting
-
-### Prometheus Metrics
-Access at: `https://your-domain.com/metrics`
-
-### Grafana Dashboards
-Access at: `https://your-domain.com:3000`
-- Default credentials: `admin/admin`
-
-### Health Monitoring
-```bash
-# Set up monitoring
-curl -X POST https://your-domain.com/api/monitoring/enable
-
-# Check drift detection
-curl https://your-domain.com/api/monitoring/drift
-```
-
-## Scaling Considerations
-
-### API Scaling
-```bash
-# Increase workers (in .env.production)
-API_WORKERS=8
-
-# Enable auto-scaling (platform-specific)
-# Vercel: Automatic
-# Railway: Configure in dashboard
-# Render: Horizontal scaling available
-```
-
-### Database Scaling
-- Use connection pooling
-- Add read replicas
-- Implement caching (Redis)
-
-### Model Updates
-- Retrain weekly with latest data
-- Version models with MLflow
-- A/B test before production deployment
-
-## Troubleshooting
-
-### Issue: API Key Invalid
-```bash
-# Verify API key
-curl "https://api.twelvedata.com/time_series?symbol=EUR/USD&apikey=YOUR_KEY"
-```
-
-### Issue: Cron Not Running
-```bash
-# Check cron logs
-# Vercel: Check Functions logs
-# Railway: Check cron service logs
-# Render: Check cron job runs
-```
-
-### Issue: Model Not Loading
-```bash
-# Check model file exists
-ls models/latest_model.pkl
-
-# Pull from DVC
-dvc pull models/latest_model.pkl.dvc
-```
-
-### Issue: High Latency
-- Enable caching
-- Increase workers
-- Optimize model inference
-- Use CDN for static assets
-
-## Security Best Practices
-
-1. **Environment Variables:**
-   - Never commit `.env` files
-   - Use platform secret management
-   - Rotate API keys regularly
-
-2. **API Protection:**
-   - Enable rate limiting
-   - Use API authentication
-   - Implement CORS properly
-
-3. **HTTPS:**
-   - Always use HTTPS in production
-   - Configure SSL certificates
-   - Enable HSTS headers
-
-4. **Monitoring:**
-   - Set up error tracking (Sentry)
-   - Enable audit logging
-   - Monitor for anomalies
-
-## Cost Optimization
-
-### Free Tier Recommendations
-- **Vercel:** Free for hobby projects
-- **Railway:** $5/month credit
-- **Render:** Free tier available
-- **Twelve Data:** 800 API calls/day free
-
-### Paid Plans
-- **Vercel Pro:** $20/month (team features)
-- **Railway:** Pay-as-you-go
-- **Render:** Starting at $7/month
-- **Twelve Data:** Starting at $9.99/month
-
-## Maintenance Schedule
-
-### Daily
-- [ ] Monitor API health
-- [ ] Check error logs
-- [ ] Verify cron execution
-
-### Weekly
-- [ ] Review model performance
-- [ ] Check data quality
-- [ ] Update dependencies
-
-### Monthly
-- [ ] Retrain models
-- [ ] Review costs
-- [ ] Security audit
-
-## Support & Resources
-
-- **Documentation:** [README.md](../README.md)
-- **Issues:** [GitHub Issues](https://github.com/Rayyan9477/Real-Time-MLOps-Pipeline-for-USD-Forecasting/issues)
-- **Twelve Data API:** [Documentation](https://twelvedata.com/docs)
-- **MLflow:** [Documentation](https://mlflow.org/docs/latest/index.html)
-
-## Emergency Contacts
-
-### Platform Support
-- Vercel: support@vercel.com
-- Railway: help@railway.app
-- Render: support@render.com
-
-### Rollback Procedure
-```bash
-# Vercel
-vercel rollback
-
-# Railway
-railway rollback
-
-# Docker
-docker pull usd-volatility-predictor:previous-tag
-docker-compose up -d
 ```
 
 ---
 
-**Last Updated:** December 29, 2025
-**Version:** 1.0.0
+## Railway Deployment
+
+Railway supports Docker and provides database hosting.
+
+```bash
+# 1. Install CLI
+npm i -g @railway/cli
+
+# 2. Login and initialize
+railway login
+railway init
+
+# 3. Deploy
+railway up
+
+# 4. Set environment variables
+railway variables set TWELVE_DATA_API_KEY=your_key
+```
+
+Railway uses the `Dockerfile` and `requirements-full.txt` (full dependencies).
+
+**Config file:** `railway.json` is included in the repo.
+
+---
+
+## Render Deployment
+
+1. Go to [Render Dashboard](https://dashboard.render.com/)
+2. Click "New +" > "Web Service"
+3. Connect your GitHub repository
+4. Configure:
+   - **Environment:** Docker
+   - **Plan:** Free or paid
+5. Add environment variables from `.env.example`
+6. Optionally add a Cron Job: `0 */2 * * *` > `python src/models/production_trainer.py`
+
+**Config file:** `render.yaml` is included in the repo.
+
+---
+
+## Docker Deployment (Self-Hosted)
+
+```bash
+# Build (uses requirements-full.txt with all dependencies)
+docker build -t usd-volatility-predictor .
+
+# Run
+docker run -d \
+  --name usd-api \
+  -p 8000:8000 \
+  --env-file .env \
+  usd-volatility-predictor
+
+# Verify
+curl http://localhost:8000/health
+```
+
+### Docker Compose (Full Stack)
+
+Starts all 8 services: FastAPI, Airflow, MLflow, PostgreSQL, MinIO, Prometheus, Grafana, and the API.
+
+```bash
+docker-compose up -d
+docker-compose ps      # Check status
+docker-compose logs -f # View logs
+```
+
+| Service | Port | Credentials |
+|---------|------|-------------|
+| FastAPI | 8000 | -- |
+| Airflow | 8080 | airflow / airflow |
+| MLflow | 5000 | -- |
+| Grafana | 3000 | admin / admin |
+| Prometheus | 9090 | -- |
+| MinIO | 9001 | minioadmin / minioadmin |
+
+---
+
+## Post-Deployment Verification
+
+```bash
+# 1. Health check
+curl https://your-domain.com/health
+# Expected: {"status": "healthy", "model_loaded": true, ...}
+
+# 2. Test prediction
+curl -X POST https://your-domain.com/predict \
+  -H "Content-Type: application/json" \
+  -d '{"features": {"close_lag_1": 1.0854, "close_rolling_mean_24": 1.085, "close_rolling_std_24": 0.0015, "log_return": 0.0002, "hour_sin": 0.5, "hour_cos": 0.866}}'
+
+# 3. Dashboard
+open https://your-domain.com/dashboard
+
+# 4. Prometheus metrics
+curl https://your-domain.com/metrics
+```
+
+---
+
+## Automated Data Updates
+
+The pipeline updates every 2 hours via GitHub Actions:
+
+- **Workflow:** `.github/workflows/data-pipeline.yml`
+- **Schedule:** `0 */2 * * *` (00:00, 02:00, ..., 22:00 UTC)
+- **Steps:** Fetch data > Transform > Train > Commit model artifacts
+
+**Manual trigger:** Actions tab > Data Pipeline > Run workflow
+
+---
+
+## Requirements Files
+
+| File | Contents | Use Case |
+|------|----------|----------|
+| `requirements.txt` | 11 packages (fastapi, xgboost, pandas, etc.) | Vercel serverless |
+| `requirements-full.txt` | 24 packages (adds mlflow, dvc, pytest, boto3, etc.) | Docker / local dev |
+
+The Dockerfile references `requirements-full.txt`. Vercel reads `requirements.txt` from root.
+
+---
+
+## Troubleshooting
+
+### Model not loading
+```bash
+# Check model exists
+ls -la models/latest_model.pkl models/latest_metadata.json
+
+# Pull from DVC (if using DVC)
+dvc pull models/latest_model.pkl.dvc
+```
+
+### High cold start on Vercel
+- Ensure `requirements.txt` stays slim (< 250MB installed)
+- The current slim requirements install at ~150MB
+- Model is 87KB — negligible impact
+
+### API returns 503
+- Model failed to load. Check logs for file path errors
+- Verify `models/latest_model.pkl` is committed to git (not gitignored)
+
+### Docker build fails
+- Ensure `requirements-full.txt` exists (renamed from old `requirements.txt`)
+- Check that `libgomp1` is installed (needed for XGBoost)
+
+---
+
+**Last Updated:** March 2026

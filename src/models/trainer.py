@@ -5,15 +5,12 @@ Trains XGBoost model for volatility prediction.
 
 import numpy as np
 import pandas as pd
-from pathlib import Path
 from datetime import datetime
 from typing import Tuple, Dict
 import matplotlib.pyplot as plt
-import seaborn as sns
 
 import mlflow
 import mlflow.xgboost
-from sklearn.model_selection import TimeSeriesSplit
 from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
 from scipy.stats import ks_2samp
 import xgboost as xgb
@@ -22,7 +19,6 @@ from config import (
     MLFLOW_CONFIG,
     MODEL_CONFIG,
     PROCESSED_DATA_DIR,
-    MODELS_DIR,
     REPORTS_DIR,
 )
 from src.utils.logger import get_logger
@@ -217,7 +213,10 @@ class ModelTrainer:
             "mae": mean_absolute_error(y_test, y_pred),
             "r2": r2_score(y_test, y_pred),
             "mape": float(
-                np.nanmean(np.abs((y_test - y_pred) / np.where(np.abs(y_test) < 1e-10, np.nan, y_test))) * 100
+                np.nanmean(np.abs(
+                    (y_test - y_pred)
+                    / np.where(np.abs(y_test) < 1e-10, np.nan, y_test)
+                )) * 100
             ) if np.any(np.abs(y_test) > 1e-10) else 0.0,
         }
 

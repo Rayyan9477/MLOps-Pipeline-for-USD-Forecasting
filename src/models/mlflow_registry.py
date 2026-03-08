@@ -5,23 +5,18 @@ Script to register the locally trained model in MLflow tracking server.
 import os
 import json
 import pickle
-import shutil
 from pathlib import Path
 from datetime import datetime
 
 import mlflow
 import mlflow.xgboost
-from mlflow.tracking import MlflowClient
-from mlflow.models.signature import infer_signature
-import pandas as pd
-import numpy as np
 
 import sys
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-from config import MODELS_DIR, DATA_DIR
-from src.utils.logger import get_logger
+from config import MODELS_DIR  # noqa: E402
+from src.utils.logger import get_logger  # noqa: E402
 
 logger = get_logger("mlflow_register")
 
@@ -77,11 +72,6 @@ def register_model_to_mlflow(
     metrics = metadata.get("metrics", {})
     feature_names = metadata.get("feature_names", [])
 
-    # Create sample input for signature
-    sample_input = (
-        pd.DataFrame([{f: 0.0 for f in feature_names}]) if feature_names else None
-    )
-
     # Start MLflow run
     with mlflow.start_run(
         run_name=f"xgboost_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
@@ -111,7 +101,7 @@ def register_model_to_mlflow(
         if latest_metadata_path.exists():
             mlflow.log_artifact(str(latest_metadata_path), artifact_path="metadata")
 
-        logger.info(f"Model registered successfully!")
+        logger.info("Model registered successfully!")
         logger.info(f"Run ID: {run.info.run_id}")
         logger.info(f"Experiment ID: {experiment_id}")
 
@@ -123,9 +113,9 @@ def main():
     run_id = register_model_to_mlflow()
 
     if run_id:
-        print(f"\n✓ Model registered successfully!")
+        print("\n✓ Model registered successfully!")
         print(f"  Run ID: {run_id}")
-        print(f"  View at: http://localhost:5000")
+        print("  View at: http://localhost:5000")
     else:
         print("\n✗ Failed to register model")
 

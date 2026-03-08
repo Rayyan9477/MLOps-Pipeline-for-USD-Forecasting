@@ -5,7 +5,7 @@ Unit tests for monitoring module.
 import pytest
 import pandas as pd
 import numpy as np
-from src.monitoring.drift import DriftDetector, DriftResult
+from src.monitoring.drift import DriftDetector
 from src.monitoring.alerts import AlertManager, AlertRule, AlertSeverity
 
 
@@ -71,7 +71,7 @@ class TestDriftDetector:
         results = detector.detect_ks_drift(shifted_data)
 
         # feature_1 should show drift
-        assert results["feature_1"].is_drift == True
+        assert results["feature_1"].is_drift
 
     def test_detect_point_drift(self, detector):
         """Test point drift detection using z-scores."""

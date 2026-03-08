@@ -87,7 +87,6 @@ jobs:
 
       - name: Run Flake8 linter
         run: flake8 src/ tests/ --max-line-length=100 --ignore=E203,W503
-        continue-on-error: true
 
   build-docker:
     name: Build Docker Image

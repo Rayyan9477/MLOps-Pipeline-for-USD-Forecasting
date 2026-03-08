@@ -5,7 +5,7 @@ Now with local model loading and prediction storage.
 """
 
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import JSONResponse, HTMLResponse
+from fastapi.responses import HTMLResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel, Field
@@ -23,15 +23,13 @@ from prometheus_client import (
     generate_latest,
     CONTENT_TYPE_LATEST,
 )
-from fastapi.responses import Response
 from prometheus_fastapi_instrumentator import Instrumentator
 from fastapi.middleware.cors import CORSMiddleware
-import logging
 import sqlite3
 from collections import deque
 import threading
 
-from config import MODELS_DIR, DATA_DIR, MONITORING_CONFIG
+from config import MODELS_DIR, DATA_DIR
 
 import os
 import subprocess
@@ -92,7 +90,6 @@ IS_SERVERLESS = bool(os.getenv("VERCEL") or os.getenv("IS_SERVERLESS"))
 model = None
 model_version = None
 model_metadata = {}
-feature_statistics = {}
 recent_predictions = deque(maxlen=100)  # Keep last 100 predictions in memory
 latency_history = deque(maxlen=100)  # Track latencies
 _state_lock = threading.Lock()
@@ -186,7 +183,9 @@ def save_prediction_to_db(prediction_data: dict):
 
         cursor.execute(
             """
-            INSERT INTO predictions (timestamp, prediction, features, latency_ms, drift_detected, drift_ratio, model_version)
+            INSERT INTO predictions
+                (timestamp, prediction, features, latency_ms,
+                 drift_detected, drift_ratio, model_version)
             VALUES (?, ?, ?, ?, ?, ?, ?)
         """,
             (
@@ -239,8 +238,17 @@ def load_local_model():
                 if not latest_model_path.exists():
                     # If the repo uses DVC pointers, allow an opt-in pull on startup.
                     dvc_pointer = MODELS_DIR / "latest_model.pkl.dvc"
-                    if dvc_pointer.exists() and os.getenv("DVC_PULL_ON_STARTUP", "").lower() in {"1", "true", "yes"}:
-                        logger.warning("Model missing but DVC pointer found; attempting 'dvc pull' (DVC_PULL_ON_STARTUP enabled)")
+                    dvc_pull_env = os.getenv(
+                        "DVC_PULL_ON_STARTUP", ""
+                    ).lower()
+                    if dvc_pointer.exists() and dvc_pull_env in {
+                        "1", "true", "yes"
+                    }:
+                        logger.warning(
+                            "Model missing but DVC pointer found; "
+                            "attempting 'dvc pull' "
+                            "(DVC_PULL_ON_STARTUP enabled)"
+                        )
                         try:
                             subprocess.run(["dvc", "pull", str(dvc_pointer)], check=True)
                         except Exception as e:
@@ -355,10 +363,7 @@ def detect_drift(features: Dict[str, float]) -> tuple:
     Detect if input features are out of distribution.
     Uses simple z-score based detection.
     """
-    # For now, use a simpler detection based on expected ranges
-    z_threshold = MONITORING_CONFIG.get("drift_zscore_threshold", 3.0)
-
-    # Expected feature ranges (approximate)
+    # Simple range-based detection for expected feature values
     expected_ranges = {
         "close_lag_1": (0.9, 1.2),
         "close_rolling_mean_24": (0.9, 1.2),
@@ -397,16 +402,29 @@ def interpret_prediction(prediction_value: float) -> tuple:
     # Medium volatility: 0.005 - 0.015 (0.5% - 1.5%)
     # High volatility: > 0.015 (1.5%)
 
+    pct = prediction_value * 100
     if prediction_value < 0.005:
-        interpretation = f"Low volatility expected ({prediction_value:.4f} or {prediction_value*100:.2f}%). Market conditions appear stable with minimal price fluctuations."
+        interpretation = (
+            f"Low volatility expected ({prediction_value:.4f} or "
+            f"{pct:.2f}%). Market conditions appear stable "
+            f"with minimal price fluctuations."
+        )
         risk_level = "Low"
         confidence_score = "High"
     elif prediction_value < 0.015:
-        interpretation = f"Moderate volatility expected ({prediction_value:.4f} or {prediction_value*100:.2f}%). Normal market activity with typical price movements."
+        interpretation = (
+            f"Moderate volatility expected ({prediction_value:.4f} "
+            f"or {pct:.2f}%). Normal market activity "
+            f"with typical price movements."
+        )
         risk_level = "Medium"
         confidence_score = "Medium"
     else:
-        interpretation = f"High volatility expected ({prediction_value:.4f} or {prediction_value*100:.2f}%). Market conditions are turbulent with significant price swings."
+        interpretation = (
+            f"High volatility expected ({prediction_value:.4f} or "
+            f"{pct:.2f}%). Market conditions are turbulent "
+            f"with significant price swings."
+        )
         risk_level = "High"
         confidence_score = "High"
 

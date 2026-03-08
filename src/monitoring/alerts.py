@@ -94,7 +94,10 @@ class AlertManager:
                 threshold=0.5,
                 comparison="gt",
                 severity=AlertSeverity.WARNING,
-                message_template="Prediction latency ({value:.3f}s) exceeds threshold ({threshold:.3f}s)",
+                message_template=(
+                    "Prediction latency ({value:.3f}s) exceeds"
+                    " threshold ({threshold:.3f}s)"
+                ),
             ),
             AlertRule(
                 name="critical_latency",
@@ -102,7 +105,10 @@ class AlertManager:
                 threshold=1.0,
                 comparison="gt",
                 severity=AlertSeverity.CRITICAL,
-                message_template="CRITICAL: Prediction latency ({value:.3f}s) exceeds {threshold:.3f}s",
+                message_template=(
+                    "CRITICAL: Prediction latency ({value:.3f}s)"
+                    " exceeds {threshold:.3f}s"
+                ),
             ),
             AlertRule(
                 name="high_drift",
@@ -110,7 +116,10 @@ class AlertManager:
                 threshold=0.2,
                 comparison="gt",
                 severity=AlertSeverity.WARNING,
-                message_template="Data drift ratio ({value:.2%}) exceeds threshold ({threshold:.2%})",
+                message_template=(
+                    "Data drift ratio ({value:.2%}) exceeds"
+                    " threshold ({threshold:.2%})"
+                ),
             ),
             AlertRule(
                 name="critical_drift",
@@ -134,7 +143,10 @@ class AlertManager:
                 threshold=0.1,
                 comparison="gt",
                 severity=AlertSeverity.WARNING,
-                message_template="Model RMSE increased by {value:.1%}, exceeds threshold ({threshold:.1%})",
+                message_template=(
+                    "Model RMSE increased by {value:.1%},"
+                    " exceeds threshold ({threshold:.1%})"
+                ),
             ),
         ]
 

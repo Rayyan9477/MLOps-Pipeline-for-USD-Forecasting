@@ -4,11 +4,10 @@ Unit tests for data extraction module.
 
 import pytest
 import pandas as pd
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import Mock, patch
 from src.data.data_extraction import (
     TwelveDataClient,
     DataQualityChecker,
-    extract_forex_data,
 )
 
 
