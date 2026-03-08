@@ -58,7 +58,6 @@ def register_model_to_mlflow(
 
     # Load local model and metadata
     latest_model_path = MODELS_DIR / "latest_model.pkl"
-    latest_json_path = MODELS_DIR / "latest_model.json"
     latest_metadata_path = MODELS_DIR / "latest_metadata.json"
 
     if not latest_model_path.exists():
@@ -96,10 +95,10 @@ def register_model_to_mlflow(
 
         # Log metrics
         if metrics:
-            mlflow.log_metric("rmse", metrics.get("rmse", 0))
-            mlflow.log_metric("mae", metrics.get("mae", 0))
-            mlflow.log_metric("r2", metrics.get("r2", 0))
-            mlflow.log_metric("mape", metrics.get("mape", 0))
+            mlflow.log_metric("rmse", metrics.get("test_rmse", metrics.get("rmse", 0)))
+            mlflow.log_metric("mae", metrics.get("test_mae", metrics.get("mae", 0)))
+            mlflow.log_metric("r2", metrics.get("test_r2", metrics.get("r2", 0)))
+            mlflow.log_metric("mape", metrics.get("test_mape", metrics.get("mape", 0)))
 
         # Log the model using sklearn flavor (more portable)
         mlflow.sklearn.log_model(

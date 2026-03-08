@@ -17,10 +17,14 @@ console.log('Dashboard Config:', CONFIG);
 function getCodespacesUrl(port) {
     const hostname = window.location.hostname;
     console.log('Current hostname:', hostname);
-    
+
+    // When deployed (not localhost/codespaces), infrastructure services aren't available
+    if (!hostname.includes('localhost') && !hostname.includes('127.0.0.1')
+        && !hostname.includes('github.dev') && !hostname.includes('githubpreview.dev')) {
+        return null;
+    }
+
     if (hostname.includes('app.github.dev')) {
-        // Extract codespace name from app.github.dev format
-        // Format: cuddly-eureka-v4pjvxx7vwg24x9-8000.app.github.dev
         const parts = hostname.split('-');
         const portIndex = parts.findIndex(p => p.includes('.app.github.dev'));
         if (portIndex > 0) {
@@ -28,12 +32,10 @@ function getCodespacesUrl(port) {
             return `https://${codespaceName}-${port}.app.github.dev`;
         }
     } else if (hostname.includes('githubpreview.dev')) {
-        // Extract codespace name from githubpreview.dev format
         const parts = hostname.split('-');
         const codespaceName = parts.slice(0, -2).join('-');
         return `https://${codespaceName}-${port}.githubpreview.dev`;
     } else if (hostname.includes('github.dev')) {
-        // Extract codespace name (everything before .github.dev)
         const codespaceName = hostname.split('.')[0];
         return `https://${codespaceName}-${port}.app.github.dev`;
     }

@@ -186,7 +186,12 @@ class ModelTrainer:
         model = xgb.XGBRegressor(**params)
 
         # Train with early stopping
-        model.fit(X_train, y_train, eval_set=[(X_test, y_test)], verbose=False)
+        model.fit(
+            X_train, y_train,
+            eval_set=[(X_test, y_test)],
+            early_stopping_rounds=10,
+            verbose=False,
+        )
 
         logger.info("Model training complete")
         return model
@@ -211,7 +216,9 @@ class ModelTrainer:
             "rmse": np.sqrt(mean_squared_error(y_test, y_pred)),
             "mae": mean_absolute_error(y_test, y_pred),
             "r2": r2_score(y_test, y_pred),
-            "mape": np.mean(np.abs((y_test - y_pred) / y_test)) * 100,
+            "mape": float(
+                np.nanmean(np.abs((y_test - y_pred) / np.where(np.abs(y_test) < 1e-10, np.nan, y_test))) * 100
+            ) if np.any(np.abs(y_test) > 1e-10) else 0.0,
         }
 
         logger.info("Model Evaluation:")

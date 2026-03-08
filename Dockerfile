@@ -11,11 +11,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libgomp1 \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy requirements and install dependencies
-COPY requirements.txt .
+# Copy requirements and install dependencies (full deps for Docker)
+COPY requirements-full.txt .
 RUN python -m venv /opt/venv \
     && /opt/venv/bin/pip install --no-cache-dir --upgrade pip \
-    && /opt/venv/bin/pip install --no-cache-dir -r requirements.txt
+    && /opt/venv/bin/pip install --no-cache-dir -r requirements-full.txt
 
 # Production stage
 FROM python:3.10-slim

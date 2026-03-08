@@ -67,7 +67,7 @@ class ProductionModelTrainer:
             X_train, X_test, y_train, y_test, feature_names
         """
         # Exclude non-feature columns
-        exclude_cols = ['datetime', 'open', 'high', 'low', 'close', 'target_volatility']
+        exclude_cols = ['datetime', 'open', 'high', 'low', 'close', 'target_volatility', 'volatility']
         feature_cols = [col for col in df.columns if col not in exclude_cols]
         
         X = df[feature_cols].values

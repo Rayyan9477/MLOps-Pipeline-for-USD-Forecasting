@@ -76,6 +76,7 @@ data/processed/*
 !railway.json
 !package.json
 !tsconfig.json
+!models/latest_metadata.json
 
 # Docker
 docker-compose.override.yml
@@ -88,6 +89,7 @@ grafana/data/
 models/*.pkl
 models/*.joblib
 models/*.h5
+!models/latest_model.pkl
 
 # Reports
 reports/*.html

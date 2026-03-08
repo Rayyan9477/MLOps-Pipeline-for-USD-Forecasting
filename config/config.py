@@ -19,9 +19,12 @@ MODELS_DIR = PROJECT_ROOT / "models"
 REPORTS_DIR = PROJECT_ROOT / "reports"
 LOGS_DIR = PROJECT_ROOT / "logs"
 
-# Ensure directories exist
+# Ensure directories exist (may fail on read-only/serverless filesystems)
 for directory in [RAW_DATA_DIR, PROCESSED_DATA_DIR, MODELS_DIR, REPORTS_DIR, LOGS_DIR]:
-    directory.mkdir(parents=True, exist_ok=True)
+    try:
+        directory.mkdir(parents=True, exist_ok=True)
+    except OSError:
+        pass
 
 # Twelve Data API Configuration (set via GitHub Secrets)
 TWELVE_DATA_CONFIG = {
@@ -48,10 +51,7 @@ MINIO_CONFIG = {
 
 # MLflow Configuration
 MLFLOW_CONFIG = {
-    "tracking_uri": os.getenv(
-        "MLFLOW_TRACKING_URI",
-        "https://dagshub.com/your_username/Real-Time-MLOps-Pipeline-for-USD-Forecasting.mlflow",
-    ),
+    "tracking_uri": os.getenv("MLFLOW_TRACKING_URI", ""),
     "tracking_username": os.getenv("MLFLOW_TRACKING_USERNAME", ""),
     "tracking_password": os.getenv("MLFLOW_TRACKING_PASSWORD", ""),
     "experiment_name": "usd_volatility_prediction",

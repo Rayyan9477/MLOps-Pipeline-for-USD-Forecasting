@@ -85,6 +85,9 @@ drift_gauge = Gauge("data_drift_ratio", "Ratio of out-of-distribution features")
 
 error_counter = Counter("prediction_errors_total", "Total number of prediction errors")
 
+# Serverless detection (Vercel sets VERCEL=1 automatically)
+IS_SERVERLESS = bool(os.getenv("VERCEL") or os.getenv("IS_SERVERLESS"))
+
 # Global state
 model = None
 model_version = None
@@ -92,6 +95,8 @@ model_metadata = {}
 feature_statistics = {}
 recent_predictions = deque(maxlen=100)  # Keep last 100 predictions in memory
 latency_history = deque(maxlen=100)  # Track latencies
+_state_lock = threading.Lock()
+prediction_count = 0
 
 
 class PredictionRequest(BaseModel):
@@ -173,6 +178,8 @@ def init_database():
 
 def save_prediction_to_db(prediction_data: dict):
     """Save prediction to SQLite database."""
+    if IS_SERVERLESS:
+        return
     try:
         conn = sqlite3.connect(str(DB_PATH))
         cursor = conn.cursor()
@@ -207,6 +214,10 @@ def load_local_model():
     try:
         logger.info("Loading model from local storage...")
 
+        # Determine model path via fallback chain
+        latest_model_path = None
+        latest_metadata_path = None
+
         # Try to load XGBoost model (more reliable)
         xgboost_files = sorted(MODELS_DIR.glob("xgboost_model_*.pkl"))
         if xgboost_files:
@@ -239,25 +250,27 @@ def load_local_model():
                         logger.error("No model files found in models directory")
                         return False
 
-        # Load model
+        # Load into local variables first, then assign atomically
         with open(latest_model_path, "rb") as f:
-            model = pickle.load(f)
+            _model = pickle.load(f)
 
         logger.info(f"Model loaded from: {latest_model_path}")
 
-        # Load metadata
+        _metadata = {}
+        _version = "local"
+
         if latest_metadata_path.exists():
             with open(latest_metadata_path, "r") as f:
-                model_metadata = json.load(f)
+                _metadata = json.load(f)
 
-            model_version = model_metadata.get("timestamp", "unknown")
-
-            # Calculate feature statistics from metadata for drift detection
-            feature_names = model_metadata.get("feature_names", [])
+            _version = _metadata.get("timestamp", "unknown")
+            feature_names = _metadata.get("feature_names", [])
             logger.info(f"Model metadata loaded. Features: {len(feature_names)}")
         else:
-            model_version = "local"
             logger.warning("Model metadata not found")
+
+        # Atomic assignment to prevent race conditions during reload
+        model, model_version, model_metadata = _model, _version, _metadata
 
         logger.info(f"Model loaded successfully. Version: {model_version}")
         return True
@@ -277,8 +290,9 @@ async def startup_event():
     """Initialize model and database on startup."""
     logger.info("Starting USD Volatility Prediction API...")
 
-    # Initialize database
-    init_database()
+    # Initialize database (skip on serverless - ephemeral filesystem)
+    if not IS_SERVERLESS:
+        init_database()
 
     # Load model
     success = load_local_model()
@@ -420,12 +434,15 @@ async def predict(request: PredictionRequest):
         )
 
         # Build feature vector with correct order
+        missing = [f for f in expected_features if f not in request.features]
+        if missing:
+            logger.warning(f"Missing features filled with 0.0: {missing}")
+
         feature_values = {}
         for feat in expected_features:
             if feat in request.features:
                 feature_values[feat] = request.features[feat]
             else:
-                # Use default value for missing features
                 feature_values[feat] = 0.0
 
         # Prepare features for prediction
@@ -444,11 +461,11 @@ async def predict(request: PredictionRequest):
         latency_ms = (end_time - start_time).total_seconds() * 1000
 
         # Update metrics
+        global prediction_count
         prediction_counter.inc()
         prediction_latency.observe(latency_ms / 1000)
-        latency_history.append(latency_ms)
 
-        # Store prediction
+        # Store prediction (thread-safe)
         prediction_data = {
             "timestamp": end_time.isoformat(),
             "prediction": prediction,
@@ -459,7 +476,11 @@ async def predict(request: PredictionRequest):
             "model_version": model_version,
         }
 
-        recent_predictions.appendleft(prediction_data)
+        with _state_lock:
+            prediction_count += 1
+            latency_history.append(latency_ms)
+            recent_predictions.appendleft(prediction_data)
+
         save_prediction_to_db(prediction_data)
 
         logger.info(
@@ -558,27 +579,28 @@ async def get_model_info():
 @app.get("/api/stats")
 async def get_stats():
     """Get real-time API statistics."""
-    # Calculate stats from recent predictions
-    avg_latency = np.mean(list(latency_history)) if latency_history else 0
+    with _state_lock:
+        avg_latency = np.mean(list(latency_history)) if latency_history else 0
+        drift_alerts = sum(1 for p in recent_predictions if p.get("drift_detected", False))
+        total = prediction_count
 
-    # Count drift alerts in recent predictions
-    drift_alerts = sum(1 for p in recent_predictions if p.get("drift_detected", False))
-
-    # Get model metrics
+    # Get model metrics (support both trainer.py and production_trainer.py key formats)
     metrics = model_metadata.get("metrics", {})
+    mape = metrics.get("test_mape", metrics.get("mape", 0))
+    rmse = metrics.get("test_rmse", metrics.get("rmse", 0))
+    mae = metrics.get("test_mae", metrics.get("mae", 0))
+    r2 = metrics.get("test_r2", metrics.get("r2", 0))
 
     return {
-        "total_predictions": int(prediction_counter._value.get()),
+        "total_predictions": total,
         "avg_latency_ms": round(avg_latency, 2),
         "drift_alerts": drift_alerts,
-        "model_accuracy": (
-            round((1 - metrics.get("mape", 0) / 100) * 100, 1) if metrics else 0
-        ),
+        "model_accuracy": round((1 - mape / 100) * 100, 1) if metrics else 0,
         "model_metrics": {
-            "rmse": round(metrics.get("rmse", 0), 6),
-            "mae": round(metrics.get("mae", 0), 6),
-            "r2": round(metrics.get("r2", 0), 4),
-            "mape": round(metrics.get("mape", 0), 2),
+            "rmse": round(rmse, 6),
+            "mae": round(mae, 6),
+            "r2": round(r2, 4),
+            "mape": round(mape, 2),
         },
         "model_loaded": model is not None,
         "model_version": model_version,
@@ -588,7 +610,8 @@ async def get_stats():
 @app.get("/api/predictions/recent")
 async def get_recent_predictions(limit: int = 20):
     """Get recent predictions."""
-    predictions = list(recent_predictions)[:limit]
+    with _state_lock:
+        predictions = list(recent_predictions)[:limit]
 
     return {
         "predictions": [
@@ -608,6 +631,22 @@ async def get_recent_predictions(limit: int = 20):
 @app.get("/api/predictions/history")
 async def get_prediction_history(limit: int = 100):
     """Get prediction history from database."""
+    if IS_SERVERLESS:
+        with _state_lock:
+            predictions = list(recent_predictions)[:limit]
+        return {
+            "predictions": [
+                {
+                    "timestamp": p["timestamp"],
+                    "prediction": round(p["prediction"], 6),
+                    "latency_ms": round(p["latency_ms"], 2),
+                    "drift_detected": p["drift_detected"],
+                    "drift_ratio": round(p["drift_ratio"], 4),
+                }
+                for p in predictions
+            ],
+            "count": len(predictions),
+        }
     try:
         conn = sqlite3.connect(str(DB_PATH))
         cursor = conn.cursor()
@@ -647,7 +686,8 @@ async def get_prediction_history(limit: int = 100):
 @app.get("/api/latency/distribution")
 async def get_latency_distribution():
     """Get latency distribution for charts."""
-    latencies = list(latency_history)
+    with _state_lock:
+        latencies = list(latency_history)
 
     if not latencies:
         return {"buckets": [], "counts": []}
@@ -674,7 +714,8 @@ async def get_latency_distribution():
 @app.get("/api/drift/history")
 async def get_drift_history():
     """Get drift score history."""
-    predictions = list(recent_predictions)
+    with _state_lock:
+        predictions = list(recent_predictions)
 
     if not predictions:
         return {"timestamps": [], "scores": []}

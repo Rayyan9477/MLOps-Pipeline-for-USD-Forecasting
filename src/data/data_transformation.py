@@ -288,8 +288,12 @@ class DataCleaner:
 
         for col in columns:
             if col in df_clean.columns:
-                z_scores = np.abs(stats.zscore(df_clean[col].dropna()))
-                df_clean = df_clean[(z_scores < std_threshold) | df_clean[col].isna()]
+                col_values = df_clean[col]
+                mask = col_values.notna()
+                z_scores = pd.Series(np.nan, index=df_clean.index)
+                if mask.any():
+                    z_scores[mask] = np.abs(stats.zscore(col_values[mask]))
+                df_clean = df_clean[(z_scores < std_threshold) | col_values.isna()]
 
         removed_rows = initial_rows - len(df_clean)
         logger.info(f"Removed {removed_rows} outlier rows (z-score > {std_threshold})")
@@ -347,7 +351,7 @@ def transform_data(df: pd.DataFrame, save_processed: bool = True) -> pd.DataFram
 
     # Drop rows with NaN target or insufficient features
     df_final = cleaner.drop_nan_target(df_transformed)
-    df_final = df_final.dropna()
+    df_final = df_final.dropna(subset=[c for c in df_final.columns if c != 'datetime'])
 
     logger.info(f"Final dataset shape: {df_final.shape}")
     logger.info(f"Features: {df_final.shape[1]} columns")
