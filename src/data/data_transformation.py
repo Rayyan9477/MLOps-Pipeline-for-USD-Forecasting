@@ -375,7 +375,7 @@ def transform_data(df: pd.DataFrame, save_processed: bool = True) -> pd.DataFram
         logger.info(f"Saved processed data to {filepath}")
 
     logger.info("=" * 60)
-    logger.info("TRANSFORMATION PIPELINE COMPLETE ✓")
+    logger.info("TRANSFORMATION PIPELINE COMPLETE")
     logger.info("=" * 60)
 
     return df_final
