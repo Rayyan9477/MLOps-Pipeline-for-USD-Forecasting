@@ -35,11 +35,6 @@ TWELVE_DATA_CONFIG = {
     "fetch_size": int(os.getenv("FETCH_SIZE", "168")),
 }
 
-# Validate required API key
-if not TWELVE_DATA_CONFIG["api_key"]:
-    import warnings
-    warnings.warn("TWELVE_DATA_API_KEY not set. Please configure in GitHub Secrets.")
-
 # MinIO Configuration
 MINIO_CONFIG = {
     "endpoint": os.getenv("MINIO_ENDPOINT", "localhost:9000"),

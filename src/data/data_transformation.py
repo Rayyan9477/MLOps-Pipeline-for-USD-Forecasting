@@ -141,6 +141,14 @@ class FeatureEngineer:
         """
         df_copy = df.copy()
 
+        # Ensure datetime column is datetime type (always convert to be safe)
+        try:
+            df_copy["datetime"] = pd.to_datetime(df_copy["datetime"])
+            logger.info("Converted datetime column to datetime type")
+        except Exception as e:
+            logger.error(f"Failed to convert datetime column: {e}")
+            raise
+
         # Extract time components
         df_copy["hour"] = df_copy["datetime"].dt.hour
         df_copy["day_of_week"] = df_copy["datetime"].dt.dayofweek
