@@ -37,17 +37,6 @@ jobs:
         run: |
           mkdir -p data/raw data/processed models
 
-      - name: Configure environment variables
-        env:
-          TWELVE_DATA_API_KEY: ${{ secrets.TWELVE_DATA_API_KEY }}
-          MLFLOW_TRACKING_URI: ${{ secrets.MLFLOW_TRACKING_URI }}
-          MLFLOW_TRACKING_USERNAME: ${{ secrets.MLFLOW_TRACKING_USERNAME }}
-          MLFLOW_TRACKING_PASSWORD: ${{ secrets.MLFLOW_TRACKING_PASSWORD }}
-          DAGSHUB_USERNAME: ${{ secrets.DAGSHUB_USERNAME }}
-          DAGSHUB_TOKEN: ${{ secrets.DAGSHUB_TOKEN }}
-        run: |
-          echo "Environment configured with secrets"
-
       - name: Setup DVC
         uses: iterative/setup-dvc@v1
 
@@ -93,18 +82,19 @@ jobs:
       - name: Transform data
         run: |
           python -c "
-          from src.data.data_transformation import DataTransformer
+          import pandas as pd
+          from src.data.data_transformation import transform_data
           from src.utils.logger import get_logger
           from pathlib import Path
 
           logger = get_logger('data_transformation_job')
           logger.info('Starting data transformation...')
 
-          transformer = DataTransformer()
-          processed_files = sorted(Path('data/raw').glob('raw_data_*.csv'))
+          raw_files = sorted(Path('data/raw').glob('raw_data_*.csv'))
 
-          if processed_files:
-              df_processed = transformer.transform(str(processed_files[-1]))
+          if raw_files:
+              df = pd.read_csv(str(raw_files[-1]))
+              df_processed = transform_data(df)
               logger.info('Data transformation completed')
               print(f'✓ Transformed data with {df_processed.shape[1]} features')
           else:

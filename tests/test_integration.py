@@ -226,10 +226,10 @@ class ComponentTester:
 
     def run_all_tests(self):
         """Execute all integration tests."""
-        print(f"\n{BLUE}{"=" * 70}{RESET}")
+        print(f"\n{BLUE}{'=' * 70}{RESET}")
         print(f"{BLUE}MLOps Pipeline - Comprehensive Integration Test{RESET}")
         print(f"{BLUE}Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}{RESET}")
-        print(f"{BLUE}{"=" * 70}{RESET}\n")
+        print(f"{BLUE}{'=' * 70}{RESET}\n")
 
         # Configuration & Artifacts
         print(f"{BLUE}Configuration & Artifacts{RESET}")
@@ -269,9 +269,9 @@ class ComponentTester:
 
     def print_summary(self):
         """Print test results summary."""
-        print(f"\n{BLUE}{"=" * 70}{RESET}")
+        print(f"\n{BLUE}{'=' * 70}{RESET}")
         print(f"{BLUE}Test Summary{RESET}")
-        print(f"{BLUE}{"=" * 70}{RESET}")
+        print(f"{BLUE}{'=' * 70}{RESET}")
 
         total = len(self.results)
         passed = sum(1 for _, success, _ in self.results if success)
@@ -289,7 +289,7 @@ class ComponentTester:
                     if error:
                         print(f"    Error: {error}")
 
-        print(f"\n{BLUE}{"=" * 70}{RESET}")
+        print(f"\n{BLUE}{'=' * 70}{RESET}")
 
         if failed == 0:
             print(f"{GREEN}ALL TESTS PASSED - SYSTEM OPERATIONAL{RESET}")
