@@ -167,9 +167,9 @@ class DeploymentValidator:
             ('docker-compose.yml', True),
             ('.dockerignore', True),
             ('requirements.txt', True),
-            ('vercel.json', False),
             ('railway.json', False),
             ('render.yaml', False),
+            ('Procfile', False),
         ]
 
         all_required_exist = True
@@ -391,7 +391,7 @@ class DeploymentValidator:
         """Validate cron/scheduling configuration."""
         self.section("Cron/Scheduling Configuration")
 
-        # Primary scheduler is GitHub Actions + Airflow.
+        # Primary scheduler: GitHub Actions cron + Airflow DAG.
         gha_workflow = (
             self.project_root / '.github'
             / 'workflows' / 'data-pipeline.yml'
@@ -410,27 +410,6 @@ class DeploymentValidator:
             "Configured (every 2 hours)"
             if gha_has_cron else "Not configured"
         )
-
-        # Check vercel.json for cron
-        vercel_config = self.project_root / 'vercel.json'
-        has_vercel_cron = False
-
-        if vercel_config.exists():
-            try:
-                config = json.loads(vercel_config.read_text())
-                has_vercel_cron = 'crons' in config
-                self.check(
-                    "Vercel cron configuration",
-                    has_vercel_cron,
-                    "Configured"
-                    if has_vercel_cron
-                    else "Not configured"
-                )
-            except json.JSONDecodeError:
-                self.check(
-                    "Vercel cron configuration",
-                    False, "Invalid JSON"
-                )
 
         # Check railway.json for cron
         railway_config = self.project_root / 'railway.json'
@@ -463,11 +442,8 @@ class DeploymentValidator:
                 render_msg
             )
 
-        # DAG schedule is primary
-        return (
-            gha_has_cron or has_vercel_cron
-            or has_render_cron or True
-        )
+        # DAG schedule is primary source of truth
+        return gha_has_cron or has_render_cron or True
 
     def print_summary(self):
         """Print validation summary."""

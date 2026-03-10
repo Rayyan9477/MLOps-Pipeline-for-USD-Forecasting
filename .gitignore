@@ -72,7 +72,6 @@ data/processed/*
 *.json
 !*.dvc
 !.gitkeep
-!vercel.json
 !railway.json
 !package.json
 !tsconfig.json
@@ -111,3 +110,6 @@ htmlcov/
 
 # MinIO data
 minio/data/
+
+# Streamlit secrets (never commit API keys)
+.streamlit/secrets.toml
